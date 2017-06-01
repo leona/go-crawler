@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"sort"
+    "crypto/tls"
 )
 
 var urlPattern = regexp.MustCompile(`(http|ftp|https)://([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?`)
@@ -24,12 +25,12 @@ type Crawler struct {
 	requestPool chan string
 	parsePool chan[]string
 	outputChannel chan string
-	counterChannel chan Counter
+	counterChannel chan counterMsg
 	countStore map[string]int
 	httpClient http.Client
 }
 
-type Counter struct {
+type counterMsg struct {
     Key string
     Value int
 }
@@ -41,9 +42,14 @@ func Instance(hosts []string, found *os.File, crawled *os.File) *Crawler {
         }
     }()
     
+    tlsConfig := &tls.Config{ InsecureSkipVerify: true }                        
+    transport := &http.Transport{ TLSClientConfig: tlsConfig }                                
+
+
     return &Crawler{
         httpClient: http.Client{ 
             Timeout: time.Duration(4 * time.Second),
+            Transport: transport,
         },
         countStore: make(map[string]int),
         foundHosts: make(map[string]int),
@@ -62,7 +68,7 @@ func (self *Crawler) Start(workerCount int) {
     self.parsePool = make(chan []string, networkWorkerCount)
     self.outputChannel = make(chan string, networkWorkerCount * 150)
     self.requestPool = make(chan string, 9999999)
-    self.counterChannel = make(chan Counter, networkWorkerCount * 150)
+    self.counterChannel = make(chan counterMsg, networkWorkerCount * 150)
     
     for id := 0; id < networkWorkerCount; id++ {
         go self.networkWorker()
@@ -112,11 +118,11 @@ func (self *Crawler) store() {
 
 		if value, status := self.foundHosts[result]; status {
 		    self.foundHosts[result] = value + 1
-			self.counterChannel <- Counter{ Key: "Duplicates", Value: 1 }
+			self.counterChannel <- counterMsg{ Key: "Duplicates", Value: 1 }
 		} else {
 			self.foundHosts[result] = 1
 			self.writeResult(result, self.outputFileFound)
-			self.counterChannel <- Counter{ Key: "Unique hosts", Value: 1 }
+			self.counterChannel <- counterMsg{ Key: "Unique hosts", Value: 1 }
 			self.requestPool <- result
 		}
     }
@@ -131,10 +137,10 @@ func (self *Crawler) writeResult(result string, file *os.File) {
 func (self *Crawler) parser() {
     for result := range self.parsePool {
     	for _, value := range result {
-    		parsedUrl, err := url.Parse(value)
+    		parsed, err := url.ParseRequestURI(value)
     
     		if err != nil {
-    			self.counterChannel <- Counter{ Key: "Failed hosts", Value: 1 }
+    			self.counterChannel <- counterMsg{ Key: "Failed hosts", Value: 1 }
     			continue
     		}
     
@@ -145,32 +151,32 @@ func (self *Crawler) parser() {
     
 func (self *Crawler) networkWorker() {
     for job := range self.requestPool {
-        self.counterChannel <- Counter{ Key: "Active scrapers", Value: 1 }
+        self.counterChannel <- counterMsg{ Key: "Active scrapers", Value: 1 }
         self.writeResult(job, self.outputFileCrawled)
 
         response, err := self.httpClient.Get(job)
         
         if err != nil {
-        	self.counterChannel <- Counter{ Key: "Failed hosts", Value: 1 }
-        	self.counterChannel <- Counter{ Key: "Active scrapers", Value: -1 }
+        	self.counterChannel <- counterMsg{ Key: "Failed hosts", Value: 1 }
+        	self.counterChannel <- counterMsg{ Key: "Active scrapers", Value: -1 }
         	continue
         }
     
         body, err := ioutil.ReadAll(response.Body)
     
         if err != nil {
-        	self.counterChannel <- Counter{ Key: "Failed hosts", Value: 1 }
-        	self.counterChannel <- Counter{ Key: "Active scrapers", Value: -1 }
+        	self.counterChannel <- counterMsg{ Key: "Failed hosts", Value: 1 }
+        	self.counterChannel <- counterMsg{ Key: "Active scrapers", Value: -1 }
         	continue
         }
         
-        self.counterChannel <- Counter{ Key: "Crawled hosts", Value: 1 }
+        self.counterChannel <- counterMsg{ Key: "Crawled hosts", Value: 1 }
         
         if match := urlPattern.FindAllString(string(body), -1); len(match) > 0 {
             self.parsePool <- match
         }
         
-        self.counterChannel <- Counter{ Key: "Active scrapers", Value: -1 }
+        self.counterChannel <- counterMsg{ Key: "Active scrapers", Value: -1 }
         response.Body.Close()
     }
 }
