@@ -49,7 +49,7 @@ func main() {
             outputFile, err = os.Create(outputFilePath)
             check(err)
         } else {
-            outputFile, err = os.OpenFile(outputFilePath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+            outputFile, err = os.OpenFile(outputFilePath, os.O_APPEND, os.ModeAppend)
             check(err)
         }
         
@@ -57,7 +57,7 @@ func main() {
             outputFileCrawled, err = os.Create(outputFileCrawledPath)
             check(err)
         } else {
-            outputFileCrawled, err = os.OpenFile(outputFileCrawledPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+            outputFileCrawled, err = os.OpenFile(outputFileCrawledPath, os.O_APPEND, os.ModeAppend)
             check(err)
         }
         

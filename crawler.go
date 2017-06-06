@@ -1,7 +1,6 @@
 package crawler
 
 import (
-	"time"
 	"fmt"
 	"net/http"
 	"io/ioutil"
@@ -12,7 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"sort"
-    "crypto/tls"
     "syscall"
 )
 
@@ -36,39 +34,6 @@ type Crawler struct {
     httpClient http.Client
     state bool
 }
-
-type counterMsg struct {
-    Key logType
-    Value int
-}
-
-type Host struct {
-    backlinks int
-    timeFound int32
-}
-
-type writeRequest struct {
-    file outputType
-    host string
-}
-
-type outputType string
-
-const (
-    FOUND outputType = "FOUND"
-    CRAWLED = "CRAWLED"
-    UPDATE = "UPDATE"
-)
-
-type logType string
-
-const (
-    ACTIVE_WORKERS logType = "Active workers" 
-    FAILED = "Failed hosts"
-    SUCCESSFULL = "Crawled hosts"
-    UNIQUE = "Unique hosts"
-    DUPLICATES = "Duplicates"
-)
 
 func Instance(hosts []string, found *os.File, crawled *os.File) *Crawler {
     urlPattern, err := regexp.Compile(`(http|ftp|https)://([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?`)
@@ -100,15 +65,12 @@ func (self *Crawler) Start(workerCount int) {
     self.outputChannel = make(chan writeRequest, networkWorkerCount * 150)
     self.requestPool = make(chan string, 9999999)
     self.counterChannel = make(chan counterMsg, networkWorkerCount * 150)
-
+    
     for id := 0; id < networkWorkerCount; id++ {
         go self.networkWorker()
     }
     
-    for _, value := range self.initialHosts {
-        self.requestPool <- value
-    }
-
+    self.loadHistory()
     go self.outputWorker()
     go self.monitor()
     
@@ -126,6 +88,10 @@ func (self *Crawler) Start(workerCount int) {
             os.Exit(1)
         }
     }()
+    
+    for _, value := range self.initialHosts {
+        self.requestPool <- value
+    }
 }
 
 func (self *Crawler) Stop() {
@@ -143,6 +109,39 @@ func (self *Crawler) Stop() {
     fmt.Printf("\nRemaining workers: " + strconv.Itoa(workers) + "\n")
     fmt.Println("Cleaned up queues and file handlers")
     fmt.Println("Final results -", "Crawled:", self.countStore[SUCCESSFULL], "Found:", self.countStore[UNIQUE])
+}
+
+func (self *Crawler) loadHistory() {
+    fmt.Println("Loading history...")
+    foundHosts := loadCsv(self.outputFileFound)
+    crawledHosts := loadCsv(self.outputFileCrawled)
+    
+    for _, value := range foundHosts {
+        integer, err := strconv.Atoi(value[1])
+        
+        if err != nil {
+            fmt.Println("Error parsing string to Int:", value[1])
+            continue
+        }
+        
+        self.foundHosts[value[0]] = int32(integer)
+    }
+    
+    queueHosts := self.foundHosts
+    
+    for _, value := range crawledHosts {
+        delete(queueHosts, value[0])
+    }
+    
+    if len(queueHosts) > 0 {
+        self.initialHosts = []string{}
+    }
+    
+    for index, _ := range queueHosts {
+        self.initialHosts = append(self.initialHosts, index)
+    }
+    
+    fmt.Println("Finished loading results from last crawl")
 }
 
 func (self *Crawler) monitor() {
@@ -173,28 +172,28 @@ func (self *Crawler) monitor() {
 }
 
 func (self *Crawler) outputWorker() {
-        for {
-            request := <- self.outputChannel
-            
-            switch request.file {
-                case FOUND:
-            		if _, status := self.foundHosts[request.host]; status {
-            		    self.foundHosts[request.host] += 1
-            			self.counterChannel <- counterMsg{ Key: DUPLICATES, Value: 1 }
-            		} else {
-            			self.foundHosts[request.host] = 1
-            			self.counterChannel <- counterMsg{ Key: UNIQUE, Value: 1 }
-            			
-            			if self.state {
-            			    self.requestPool <- request.host
-            			}
-            			self.requestWrite(request)
-            		}
-            	case CRAWLED:
-            	    self.requestWrite(request)
-            }
-    		
+    for {
+        request := <- self.outputChannel
+        
+        switch request.file {
+            case FOUND:
+        		if _, status := self.foundHosts[request.host]; status {
+        		    self.foundHosts[request.host] += 1
+        			self.counterChannel <- counterMsg{ Key: DUPLICATES, Value: 1 }
+        		} else {
+        			self.foundHosts[request.host] = 1
+        			self.counterChannel <- counterMsg{ Key: UNIQUE, Value: 1 }
+        			
+        			if self.state {
+        			    self.requestPool <- request.host
+        			}
+        			self.requestWrite(request)
+        		}
+        	case CRAWLED:
+        	    self.requestWrite(request)
         }
+		
+    }
 }
 
 func (self *Crawler) requestWrite(request writeRequest) {
@@ -300,60 +299,5 @@ func (self *Crawler) IsUrl(url string) bool {
 }
 
 
-// https://groups.google.com/forum/#!topic/golang-nuts/-pqkICuokio
-func removeDuplicates(a []string) []string {
-        result := []string{}
-        seen := map[string]string{}
-        
-        for _, val := range a {
-            if _, ok := seen[val]; !ok {
-                result = append(result, val)
-                seen[val] = val
-            }
-        }
-        return result
-} 
 
-func createRequestClient() http.Client {
-    tlsConfig := &tls.Config{ InsecureSkipVerify: true }                        
-    transport := &http.Transport{ TLSClientConfig: tlsConfig }   
-    
-    return http.Client{ 
-        Timeout: time.Duration(4 * time.Second),
-        Transport: transport,
-    }
-}
-
-func getTime() int32 {
-	return int32(time.Now().Unix())
-}
-
-	
-func check(e error) {
-    if e != nil {
-        panic(e)
-    }
-}
-
-//https://stackoverflow.com/questions/39442167/convert-int32-to-string-in-golang
-func String(n int32) string {
-    buf := [11]byte{}
-    pos := len(buf)
-    i := int64(n)
-    signed := i < 0
-    if signed {
-        i = -i
-    }
-    for {
-        pos--
-        buf[pos], i = '0'+byte(i%10), i/10
-        if i == 0 {
-            if signed {
-                pos--
-                buf[pos] = '-'
-            }
-            return string(buf[pos:])
-        }
-    }
-}
 
