@@ -8,8 +8,28 @@ import (
     "encoding/csv"
     "bufio"
     "io"
-    //"fmt"
+    "strings"
 )
+
+func (self *Crawler) writeResultGroup(file *os.File, results string, ) {
+    if file != nil {
+        file.WriteString(results)
+    }
+}
+
+func (self *Crawler) writeResult(file *os.File, results...string, ) {
+    if file != nil {
+        return
+        output := strings.Join(results[:],",")
+        file.WriteString(output + "\n")
+    }
+}
+
+func (self *Crawler) IsUrl(url string) bool {
+    return self.urlPattern.MatchString(url)
+}
+
+
 // https://groups.google.com/forum/#!topic/golang-nuts/-pqkICuokio
 func removeDuplicates(a []string) []string {
         result := []string{}
@@ -89,3 +109,4 @@ func loadCsv(file *os.File) [][]string {
 
     return output
 }
+
