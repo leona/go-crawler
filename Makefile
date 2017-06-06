@@ -1,7 +1,7 @@
 .PHONY: default
 default: build
 
-setup:
+setup-all:
 	@export GOPATH=$HOME/workspace
 	@export PATH=$PATH:/usr/local/go/bin
 	@export GOROOT=/usr/local/go
@@ -12,7 +12,7 @@ build-small:
 	@upx --brute --best --lzma ./cli/cli
 
 build-linux:
-	@go build -ldflags="-s -w" -o ./cli/cli ./cli/cli.go
+	@GOOS=linux go build -ldflags="-s -w" -o ./cli/cli ./cli/cli.go
 
 build-mac:
 	@GOOS=darwin go build -o ./cli/cli cli/cli.go
