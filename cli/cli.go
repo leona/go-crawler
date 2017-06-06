@@ -8,15 +8,21 @@ import (
 	"syscall"
 	"runtime"
 	"time"
+	"strings"
 	"strconv"
-	"github.com/neoh/crawler"
+	"bufio"
+	"net/http"
+	".."
 )
 
+import _ "net/http/pprof"
 
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU())
 
-    if crawler.IsUrl(os.Args[1]) {
+    if len(os.Args) > 1 {
+        go http.ListenAndServe(":8080", http.DefaultServeMux)
+
         fmt.Println("Running from cli")
         var workerAmount int
         var outputFilePath string
@@ -25,12 +31,13 @@ func main() {
         var outputFileCrawled *os.File
         
         if len(os.Args) > 2 {
-            outputFilePath = os.Args[2]
+            outputFilePath = os.Args[2] + "_output.txt"
+            outputFileCrawledPath = os.Args[2] + "_history.txt"
         } else {
             outputFilePath = "./crawl_output.txt"
+            outputFileCrawledPath = "./crawl_history.txt"
         }
         
-        outputFileCrawledPath = "./crawl_history.txt"
         
         if len(os.Args) > 3 {
             workerAmount, _ = strconv.Atoi(os.Args[3])
@@ -67,15 +74,32 @@ func main() {
     
         startTime := getTime()
         fmt.Println("Starting", workerAmount, "threads")
+        
         crawler := *crawler.Instance([]string{os.Args[1]}, outputFile, outputFileCrawled)
         crawler.Start(workerAmount)
         
+        fmt.Println("Press F + \\r to finish crawling gracefully")
+        scanner := bufio.NewScanner(os.Stdin)
+        
+        for scanner.Scan() {
+            text := scanner.Text()
+
+            if strings.ToLower(text) == "f" {
+                crawler.Stop()
+                os.Exit(1)
+                done <- true
+            }
+        }
+        
         <-done
-        outputFile.Close()
     	fmt.Println("Finished in:", getTime() - startTime, "second(s)")
+    	os.Exit(1)
     }
 }
 
+func awaitInput() string {
+    return ""
+}
 func getTime() int32 {
 	return int32(time.Now().Unix())
 }
