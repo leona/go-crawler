@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"os"
 )
+
 type Crawler struct {
     urlPattern *regexp.Regexp
     outputFileFound *os.File

@@ -83,7 +83,7 @@ func (self *Crawler) networkWorker() {
 		self.outputChannel <- writeRequest{ file: CRAWLED, host: job }
 			
         response, err := self.httpClient.Get(job)
-        
+
         if err != nil {
             self.counterChannel <- counterMsg{ Key: ACTIVE_WORKERS, Value: -1 }
         	self.counterChannel <- counterMsg{ Key: FAILED, Value: 1 }

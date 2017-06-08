@@ -97,14 +97,10 @@ func main() {
     }
 }
 
-func awaitInput() string {
-    return ""
-}
 func getTime() int32 {
 	return int32(time.Now().Unix())
 }
 
-	
 func check(e error) {
     if e != nil {
         panic(e)

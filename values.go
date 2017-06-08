@@ -13,3 +13,7 @@ const (
     UNIQUE = "Unique hosts"
     DUPLICATES = "Duplicates"
 )
+
+const (
+    URL_REGEX = `(http|ftp|https)://([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?`
+)

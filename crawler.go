@@ -1,17 +1,18 @@
 package crawler
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
-	"os"
-	"os/signal"
-	"strconv"
+    "fmt"
+    "regexp"
+    "strings"
+    "os"
+    "os/signal"
+    "strconv"
     "syscall"
 )
 
+//TODO: Ignore www. version
 func Instance(hosts []string, found *os.File, crawled *os.File) *Crawler {
-    urlPattern, err := regexp.Compile(`(http|ftp|https)://([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:/~+#-]*[\w@?^=%&/~+#-])?`)
+    urlPattern, err := regexp.Compile(URL_REGEX)
 
     if err != nil {
         panic("urlPattern will not compile")
@@ -154,9 +155,3 @@ func (self *Crawler) writeQueue(queueType outputType, queue string) {
             self.writeResultGroup(self.outputFileCrawled, queue)
     }
 }
-
-
-
-
-
-
